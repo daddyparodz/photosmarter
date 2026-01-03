@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { load } from 'cheerio';
 import { extension } from 'mime-types';
-import { clamp, env } from '~/server/common/util';
+import { clamp, env, isDebugEnabled } from '~/server/common/util';
 
 export const PhotosmartScanResolutions = {
   High: 600,
@@ -170,6 +170,15 @@ class PhotosmartService {
       colorMode: options?.colorMode ?? 'Color',
     };
 
+    this.logDebug('Starting scan', {
+      type: normalizedOptions.type,
+      resolution: normalizedOptions.resolution,
+      width: normalizedOptions.dimension.width,
+      height: normalizedOptions.dimension.height,
+      colorMode: normalizedOptions.colorMode,
+      quality: normalizedOptions.quality,
+    });
+
     try {
       return await this.scanEscl(normalizedOptions);
     } catch (error) {
@@ -189,6 +198,7 @@ class PhotosmartService {
     const url = this.baseUrl.concat('/eSCL/ScanJobs');
     const xml = this.createEsclScanJob(options);
 
+    this.logDebug('Submitting eSCL scan job', { url });
     const response = await axios.post<void>(url, xml, {
       headers: {
         'Content-Type': 'text/xml',
@@ -211,6 +221,7 @@ class PhotosmartService {
       ? location
       : this.baseUrl.concat(location);
 
+    this.logDebug('eSCL scan job created', { location: jobUrl });
     const binaryResponse = await axios.get<ArrayBuffer>(
       `${jobUrl}/NextDocument`,
       {
@@ -219,6 +230,7 @@ class PhotosmartService {
     );
 
     const contentType = binaryResponse.headers['content-type'];
+    this.logDebug('eSCL scan document received', { contentType });
 
     return {
       extension:
@@ -235,6 +247,7 @@ class PhotosmartService {
     const url = this.baseUrl.concat('/Scan/Jobs');
     const xml = this.createScanJob(options);
 
+    this.logDebug('Submitting legacy scan job', { url });
     const response = await axios.post<void>(url, xml, {
       headers: {
         'Content-Type': 'application/xml',
@@ -254,6 +267,9 @@ class PhotosmartService {
       throw new Error('Binary URL could not be determined');
     }
 
+    this.logDebug('Fetching legacy scan document', {
+      url: this.baseUrl.concat(binaryUrl),
+    });
     const binaryResponse = await axios.get<ArrayBuffer>(
       this.baseUrl.concat(binaryUrl),
       {
@@ -262,6 +278,7 @@ class PhotosmartService {
     );
 
     const contentType = binaryResponse.headers['content-type'];
+    this.logDebug('Legacy scan document received', { contentType });
 
     return {
       extension:
@@ -402,7 +419,7 @@ class PhotosmartService {
       string
     >();
     $('scan\\:ColorMode').each((_, element) => {
-      const value = $(element).text().trim();
+      const value = String($(element).text()).trim();
       if (value === 'RGB24') {
         colorModes.set('Color', 'Color');
       } else if (value === 'Grayscale8') {
@@ -414,7 +431,7 @@ class PhotosmartService {
 
     const resolutions = new Set<number>();
     $('scan\\:DiscreteResolution scan\\:XResolution').each((_, element) => {
-      const value = Number.parseInt($(element).text().trim(), 10);
+      const value = Number.parseInt(String($(element).text()).trim(), 10);
       if (!Number.isNaN(value)) {
         resolutions.add(value);
       }
@@ -425,7 +442,7 @@ class PhotosmartService {
       string
     >();
     $('scan\\:DocumentFormatExt').each((_, element) => {
-      const value = $(element).text().trim().toLowerCase();
+      const value = String($(element).text()).trim().toLowerCase();
       if (value === 'application/pdf') {
         formats.set('PDF', 'PDF');
       } else if (value === 'image/jpeg') {
@@ -434,19 +451,19 @@ class PhotosmartService {
     });
 
     const minWidth = Number.parseInt(
-      $('scan\\:MinWidth').first().text().trim(),
+      String($('scan\\:MinWidth').first().text()).trim(),
       10,
     );
     const maxWidth = Number.parseInt(
-      $('scan\\:MaxWidth').first().text().trim(),
+      String($('scan\\:MaxWidth').first().text()).trim(),
       10,
     );
     const minHeight = Number.parseInt(
-      $('scan\\:MinHeight').first().text().trim(),
+      String($('scan\\:MinHeight').first().text()).trim(),
       10,
     );
     const maxHeight = Number.parseInt(
-      $('scan\\:MaxHeight').first().text().trim(),
+      String($('scan\\:MaxHeight').first().text()).trim(),
       10,
     );
 
@@ -500,6 +517,17 @@ class PhotosmartService {
           : fallback.resolutions,
       dimensions: dimensions.length > 0 ? dimensions : fallback.dimensions,
     };
+  }
+
+  private logDebug(message: string, details?: Record<string, unknown>) {
+    if (!isDebugEnabled()) {
+      return;
+    }
+    if (details) {
+      console.info(`[PhotosmartService] ${message}`, details);
+      return;
+    }
+    console.info(`[PhotosmartService] ${message}`);
   }
 }
 
