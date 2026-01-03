@@ -375,6 +375,7 @@ class PhotosmartService {
       colorModes: [
         { value: 'Color', label: 'Color' },
         { value: 'Grayscale', label: 'Grayscale' },
+        { value: 'BlackAndWhite', label: 'Black and white' },
       ],
       resolutions: Object.values(PhotosmartScanResolutions).sort(
         (a, b) => a - b,
