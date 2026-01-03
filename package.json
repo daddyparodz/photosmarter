@@ -24,6 +24,7 @@
     "@solidjs/start": "^1.0.6",
     "axios": "^1.6.0",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.2.3",
     "mime-types": "^2.1.35",
     "sanitize-filename": "^1.6.3",
     "solid-js": "^1.8.20",

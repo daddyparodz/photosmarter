@@ -4,5 +4,8 @@
 /dist/
 
 /pictures/
-
 /app/
+
+*.pdf
+*.env
+*.jpeg
