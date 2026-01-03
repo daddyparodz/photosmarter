@@ -3,6 +3,7 @@ import sanitize from 'sanitize-filename';
 import fileService from '~/server/services/file-service';
 import photosmartService, {
   PhotosmartScanDimensions,
+  PhotosmartScanCapabilities,
   PhotosmartScanOptions,
   PhotosmartScanResolutions,
   PhotosmartScanResult,
@@ -13,17 +14,77 @@ export type ScanResult = {
   message: string;
 };
 
+export type ScanCapabilities = PhotosmartScanCapabilities;
+
+const parseDimension = (
+  value: string | null,
+): { width: number; height: number } | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const match = value.match(/^(\d+)x(\d+)$/);
+  if (match) {
+    const width = Number.parseInt(match[1], 10);
+    const height = Number.parseInt(match[2], 10);
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+  }
+
+  if (value in PhotosmartScanDimensions) {
+    return PhotosmartScanDimensions[
+      value as keyof typeof PhotosmartScanDimensions
+    ];
+  }
+
+  return undefined;
+};
+
+const normalizeColorMode = (
+  value: string | null,
+): PhotosmartScanOptions['colorMode'] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'color' || normalized === 'rgb24') {
+    return 'Color';
+  }
+  if (normalized === 'grayscale' || normalized === 'grayscale8') {
+    return 'Grayscale';
+  }
+  if (
+    normalized === 'black' ||
+    normalized === 'blackandwhite' ||
+    normalized === 'blackandwhite1'
+  ) {
+    return 'BlackAndWhite';
+  }
+
+  return undefined;
+};
+
+export const scanCapabilities = async (): Promise<ScanCapabilities> => {
+  return photosmartService.capabilities();
+};
+
 export const scan = async (form: FormData): Promise<ScanResult> => {
   const type = form.get('type') as PhotosmartScanOptions['type'];
-  const dimension = form.get(
-    'dimension',
-  ) as keyof typeof PhotosmartScanDimensions;
-  const resolution = form.get(
-    'resolution',
-  ) as keyof typeof PhotosmartScanResolutions;
+  const dimensionValue = form.get('dimension') as string | null;
+  const resolutionValue = form.get('resolution') as string | null;
   const quality = Number.parseInt(form.get('quality') as string, 10);
-  const color = form.get('color') === 'Color';
+  const colorModeValue = (form.get('colorMode') ??
+    form.get('color')) as string | null;
   const preferredFileName = form.get('fileName') as string | null;
+
+  const dimension =
+    parseDimension(dimensionValue) ?? PhotosmartScanDimensions.A4;
+  const resolution =
+    Number.parseInt(resolutionValue ?? '', 10) ||
+    PhotosmartScanResolutions.Text;
+  const colorMode = normalizeColorMode(colorModeValue);
 
   const status = await photosmartService.status();
   if (status !== 'Idle') {
@@ -41,10 +102,10 @@ export const scan = async (form: FormData): Promise<ScanResult> => {
   try {
     result = await photosmartService.scan({
       type,
-      dimension: PhotosmartScanDimensions[dimension],
-      resolution: PhotosmartScanResolutions[resolution],
+      dimension,
+      resolution,
       quality,
-      color,
+      colorMode,
     });
   } catch (error) {
     return {

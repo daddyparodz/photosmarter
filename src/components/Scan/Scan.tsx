@@ -1,19 +1,59 @@
 import { action, useSubmission } from '@solidjs/router';
-import { createEffect, createSignal, untrack } from 'solid-js';
+import { createEffect, createSignal, onMount, untrack } from 'solid-js';
 import toast from 'solid-toast';
 import '~/components/Scan/Scan.css';
-import { scan, ScanResult } from '~/server/api/scan';
+import { scan, ScanCapabilities, ScanResult } from '~/server/api/scan';
+
+const resolutionLabels: Record<number, string> = {
+  600: 'High',
+  300: 'Text',
+  200: 'Photo',
+  75: 'Screen',
+};
+
+const formatResolutionLabel = (dpi: number) => {
+  const label = resolutionLabels[dpi];
+  return label ? `${label} - ${dpi} dpi` : `Custom - ${dpi} dpi`;
+};
+
+const pickDefaultResolution = (resolutions: number[]) => {
+  if (resolutions.length === 0) {
+    return undefined;
+  }
+  return resolutions.includes(300) ? 300 : resolutions[0];
+};
 
 const performScan = action(async (form: FormData): Promise<ScanResult> => {
   'use server';
   return scan(form);
 }, 'scan');
 
+const fetchCapabilities = async (): Promise<ScanCapabilities> => {
+  const response = await fetch('/api/scan/options');
+  if (!response.ok) {
+    throw new Error('Failed to load scan options');
+  }
+  return response.json();
+};
+
 export default () => {
   const [loading, setLoading] = createSignal<string>();
   const [quality, setQuality] = createSignal(80);
   const [fileName, setFileName] = createSignal('');
+  const [capabilities, setCapabilities] = createSignal<ScanCapabilities>();
+  const [format, setFormat] = createSignal<string>();
+  const [dimension, setDimension] = createSignal<string>();
+  const [resolution, setResolution] = createSignal<string>();
+  const [colorMode, setColorMode] = createSignal<string>();
   const scanning = useSubmission(performScan);
+
+  onMount(async () => {
+    try {
+      setCapabilities(await fetchCapabilities());
+    } catch (error) {
+      toast.error('Failed to load scan options');
+    }
+  });
 
   const handleSubmit = (event: Event) => {
     const name = prompt('Enter a file name');
@@ -65,6 +105,44 @@ export default () => {
     scanning.clear();
   });
 
+  createEffect(() => {
+    const caps = capabilities();
+    if (!caps) {
+      return;
+    }
+
+    if (
+      !format() ||
+      !caps.formats.some((option) => option.value === format())
+    ) {
+      setFormat(caps.formats[0]?.value);
+    }
+
+    if (
+      !dimension() ||
+      !caps.dimensions.some((option) => option.value === dimension())
+    ) {
+      setDimension(caps.dimensions[0]?.value);
+    }
+
+    if (
+      !resolution() ||
+      !caps.resolutions.some(
+        (option) => option.toString() === resolution(),
+      )
+    ) {
+      const preferred = pickDefaultResolution(caps.resolutions);
+      setResolution(preferred?.toString());
+    }
+
+    if (
+      !colorMode() ||
+      !caps.colorModes.some((option) => option.value === colorMode())
+    ) {
+      setColorMode(caps.colorModes[0]?.value);
+    }
+  });
+
   return (
     <form
       method="post"
@@ -84,12 +162,13 @@ export default () => {
           name="type"
           class="options__select"
           required={true}
-          disabled={scanning.pending}
+          disabled={scanning.pending || !capabilities()}
+          value={format()}
+          onChange={({ currentTarget }) => setFormat(currentTarget.value)}
         >
-          <option value="PDF" selected={true}>
-            PDF
-          </option>
-          <option value="JPEG">JPEG</option>
+          {(capabilities()?.formats ?? []).map((option) => (
+            <option value={option.value}>{option.label}</option>
+          ))}
         </select>
 
         <label for="dimension-select" class="options__label">
@@ -100,12 +179,13 @@ export default () => {
           name="dimension"
           class="options__select"
           required={true}
-          disabled={scanning.pending}
+          disabled={scanning.pending || !capabilities()}
+          value={dimension()}
+          onChange={({ currentTarget }) => setDimension(currentTarget.value)}
         >
-          <option value="A4" selected={true}>
-            A4
-          </option>
-          <option value="Letter">Letter</option>
+          {(capabilities()?.dimensions ?? []).map((option) => (
+            <option value={option.value}>{option.label}</option>
+          ))}
         </select>
 
         <label for="resolution-select" class="options__label">
@@ -116,14 +196,15 @@ export default () => {
           name="resolution"
           class="options__select"
           required={true}
-          disabled={scanning.pending}
+          disabled={scanning.pending || !capabilities()}
+          value={resolution()}
+          onChange={({ currentTarget }) => setResolution(currentTarget.value)}
         >
-          <option value="High">High</option>
-          <option value="Text" selected={true}>
-            Text
-          </option>
-          <option value="Photo">Photo</option>
-          <option value="Screen">Screen</option>
+          {(capabilities()?.resolutions ?? []).map((option) => (
+            <option value={option.toString()}>
+              {formatResolutionLabel(option)}
+            </option>
+          ))}
         </select>
 
         <label for="color-select" class="options__label">
@@ -131,15 +212,16 @@ export default () => {
         </label>
         <select
           id="color-select"
-          name="color"
+          name="colorMode"
           class="options__select"
           required={true}
-          disabled={scanning.pending}
+          disabled={scanning.pending || !capabilities()}
+          value={colorMode()}
+          onChange={({ currentTarget }) => setColorMode(currentTarget.value)}
         >
-          <option value="Color" selected={true}>
-            Color
-          </option>
-          <option value="Black">Black</option>
+          {(capabilities()?.colorModes ?? []).map((option) => (
+            <option value={option.value}>{option.label}</option>
+          ))}
         </select>
 
         <label for="quality-range" class="options__label">
@@ -161,7 +243,11 @@ export default () => {
         />
       </fieldset>
 
-      <button type="submit" class="options__scan" disabled={scanning.pending}>
+      <button
+        type="submit"
+        class="options__scan"
+        disabled={scanning.pending || !capabilities()}
+      >
         <span>Scan</span>
       </button>
     </form>

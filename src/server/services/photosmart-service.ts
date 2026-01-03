@@ -21,6 +21,39 @@ export const PhotosmartScanDimensions = {
   },
 };
 
+const ScanDimensionPresets = [
+  {
+    key: 'A4',
+    label: 'A4 (210x297 mm)',
+    width: 2_480,
+    height: 3_508,
+  },
+  {
+    key: 'Letter',
+    label: 'Letter (8.5x11 in)',
+    width: 2_550,
+    height: 3_300,
+  },
+  {
+    key: '4x6',
+    label: '4x6 in',
+    width: 1_200,
+    height: 1_800,
+  },
+  {
+    key: '5x7',
+    label: '5x7 in',
+    width: 1_500,
+    height: 2_100,
+  },
+  {
+    key: '10x15',
+    label: '10x15 cm',
+    width: 1_181,
+    height: 1_772,
+  },
+];
+
 export const PhotosmartScanQualities = {
   Low: 25,
   Medium: 65,
@@ -41,9 +74,9 @@ export type PhotosmartScanOptions = {
     height: number;
   };
   /**
-   * Defaults to `true`.
+   * Defaults to `Color`.
    */
-  color?: boolean;
+  colorMode?: 'Color' | 'Grayscale' | 'BlackAndWhite';
   /**
    * Defaults to `PDF`.
    */
@@ -61,11 +94,37 @@ export type PhotosmartScanResult = {
   data: ArrayBuffer;
 };
 
+export type PhotosmartScanCapabilities = {
+  formats: Array<{ value: 'PDF' | 'JPEG'; label: string }>;
+  colorModes: Array<{
+    value: 'Color' | 'Grayscale' | 'BlackAndWhite';
+    label: string;
+  }>;
+  resolutions: number[];
+  dimensions: Array<{
+    value: string;
+    label: string;
+    width: number;
+    height: number;
+  }>;
+};
+
 class PhotosmartService {
   private readonly baseUrl: string;
 
   constructor() {
     this.baseUrl = env('PHOTOSMART_URL');
+  }
+
+  async capabilities(): Promise<PhotosmartScanCapabilities> {
+    const fallback = this.getFallbackCapabilities();
+    try {
+      return await this.fetchEsclCapabilities(fallback);
+    } catch (error) {
+      console.error('[PhotosmartService] Failed to retrieve capabilities!');
+      console.error('[PhotosmartService] Original error:', error);
+      return fallback;
+    }
   }
 
   async status(): Promise<PhotosmartStatus | undefined> {
@@ -108,7 +167,7 @@ class PhotosmartService {
         options?.quality ?? PhotosmartScanQualities.Medium,
         100,
       ),
-      color: options?.color ?? true,
+      colorMode: options?.colorMode ?? 'Color',
     };
 
     try {
@@ -245,7 +304,7 @@ class PhotosmartService {
     const format = options.type === 'PDF' ? 'Pdf' : 'Jpeg';
     const contentType = options.type === 'PDF' ? 'Document' : 'Photo';
     const compressionFactor = 100 - options.quality;
-    const color = options.color ? 'Color' : 'Gray';
+    const color = options.colorMode === 'Color' ? 'Color' : 'Gray';
 
     return `
       <scan:ScanJob xmlns:scan="http://www.hp.com/schemas/imaging/con/cnx/scan/2008/08/19"
@@ -275,7 +334,12 @@ class PhotosmartService {
   }
 
   private createEsclScanJob(options: Required<PhotosmartScanOptions>): string {
-    const colorMode = options.color ? 'RGB24' : 'Grayscale8';
+    const colorMode =
+      options.colorMode === 'Color'
+        ? 'RGB24'
+        : options.colorMode === 'BlackAndWhite'
+          ? 'BlackAndWhite1'
+          : 'Grayscale8';
     const intent = options.type === 'PDF' ? 'Document' : 'Photo';
     const documentFormat =
       options.type === 'PDF' ? 'application/pdf' : 'image/jpeg';
@@ -300,6 +364,141 @@ class PhotosmartService {
         </scan:ScanRegions>
       </scan:ScanSettings>
     `;
+  }
+
+  private getFallbackCapabilities(): PhotosmartScanCapabilities {
+    return {
+      formats: [
+        { value: 'PDF', label: 'PDF' },
+        { value: 'JPEG', label: 'JPEG' },
+      ],
+      colorModes: [
+        { value: 'Color', label: 'Color' },
+        { value: 'Grayscale', label: 'Grayscale' },
+      ],
+      resolutions: Object.values(PhotosmartScanResolutions).sort(
+        (a, b) => a - b,
+      ),
+      dimensions: ScanDimensionPresets.map((preset) => ({
+        value: `${preset.width}x${preset.height}`,
+        label: preset.label,
+        width: preset.width,
+        height: preset.height,
+      })),
+    };
+  }
+
+  private async fetchEsclCapabilities(
+    fallback: PhotosmartScanCapabilities,
+  ): Promise<PhotosmartScanCapabilities> {
+    const url = this.baseUrl.concat('/eSCL/ScannerCapabilities');
+    const response = await axios.get<string>(url);
+    const xml = response.data;
+    const $ = load(xml, { xmlMode: true });
+
+    const colorModes = new Map<
+      PhotosmartScanCapabilities['colorModes'][number]['value'],
+      string
+    >();
+    $('scan\\:ColorMode').each((_, element) => {
+      const value = $(element).text().trim();
+      if (value === 'RGB24') {
+        colorModes.set('Color', 'Color');
+      } else if (value === 'Grayscale8') {
+        colorModes.set('Grayscale', 'Grayscale');
+      } else if (value === 'BlackAndWhite1') {
+        colorModes.set('BlackAndWhite', 'Black and white');
+      }
+    });
+
+    const resolutions = new Set<number>();
+    $('scan\\:DiscreteResolution scan\\:XResolution').each((_, element) => {
+      const value = Number.parseInt($(element).text().trim(), 10);
+      if (!Number.isNaN(value)) {
+        resolutions.add(value);
+      }
+    });
+
+    const formats = new Map<
+      PhotosmartScanCapabilities['formats'][number]['value'],
+      string
+    >();
+    $('scan\\:DocumentFormatExt').each((_, element) => {
+      const value = $(element).text().trim().toLowerCase();
+      if (value === 'application/pdf') {
+        formats.set('PDF', 'PDF');
+      } else if (value === 'image/jpeg') {
+        formats.set('JPEG', 'JPEG');
+      }
+    });
+
+    const minWidth = Number.parseInt(
+      $('scan\\:MinWidth').first().text().trim(),
+      10,
+    );
+    const maxWidth = Number.parseInt(
+      $('scan\\:MaxWidth').first().text().trim(),
+      10,
+    );
+    const minHeight = Number.parseInt(
+      $('scan\\:MinHeight').first().text().trim(),
+      10,
+    );
+    const maxHeight = Number.parseInt(
+      $('scan\\:MaxHeight').first().text().trim(),
+      10,
+    );
+
+    const widthMin = Number.isNaN(minWidth) ? 0 : minWidth;
+    const heightMin = Number.isNaN(minHeight) ? 0 : minHeight;
+    const widthMax = Number.isNaN(maxWidth) ? Number.MAX_SAFE_INTEGER : maxWidth;
+    const heightMax = Number.isNaN(maxHeight)
+      ? Number.MAX_SAFE_INTEGER
+      : maxHeight;
+
+    const dimensions = ScanDimensionPresets.filter(
+      (preset) =>
+        preset.width >= widthMin &&
+        preset.width <= widthMax &&
+        preset.height >= heightMin &&
+        preset.height <= heightMax,
+    ).map((preset) => ({
+      value: `${preset.width}x${preset.height}`,
+      label: preset.label,
+      width: preset.width,
+      height: preset.height,
+    }));
+
+    const formatOrder: PhotosmartScanCapabilities['formats'][number]['value'][] =
+      ['PDF', 'JPEG'];
+    const colorOrder: PhotosmartScanCapabilities['colorModes'][number]['value'][] =
+      ['Color', 'Grayscale', 'BlackAndWhite'];
+
+    return {
+      formats:
+        formats.size > 0
+          ? formatOrder
+              .filter((value) => formats.has(value))
+              .map((value) => ({
+                value,
+                label: formats.get(value) ?? value,
+              }))
+          : fallback.formats,
+      colorModes:
+        colorModes.size > 0
+          ? colorOrder
+              .filter((value) => colorModes.has(value))
+              .map((value) => ({
+                value,
+                label: colorModes.get(value) ?? value,
+              }))
+          : fallback.colorModes,
+      resolutions:
+        resolutions.size > 0
+          ? Array.from(resolutions).sort((a, b) => a - b)
+          : fallback.resolutions,
+      dimensions: dimensions.length > 0 ? dimensions : fallback.dimensions,
+    };
   }
 }
 

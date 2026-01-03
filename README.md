@@ -13,6 +13,14 @@ This project is a simplified and mobile-friendly web interface for the HP Photos
 - Run `yarn build`/`npm run build` followed by `yarn start`/`npm run start`.
 - Optionally via docker: `docker compose up -d`.
 
+## Development
+
+Ensure `.env` is configured (copy `.env.example`) and dependencies are installed.
+
+Start the dev server with hot reload:
+- `npm run dev` (or `yarn dev`)
+- To expose on the network: `npm run dev -- --host 0.0.0.0`
+
 ## Credits
 
 Thanks to [pyscanner](https://github.com/amlweems/pyscanner).
