@@ -38,7 +38,7 @@ const fetchCapabilities = async (): Promise<ScanCapabilities> => {
 
 export default () => {
   const [loading, setLoading] = createSignal<string>();
-  const [quality, setQuality] = createSignal(80);
+  const [quality, setQuality] = createSignal(100);
   const [fileName, setFileName] = createSignal('');
   const [capabilities, setCapabilities] = createSignal<ScanCapabilities>();
   const [format, setFormat] = createSignal<string>();

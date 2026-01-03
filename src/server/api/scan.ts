@@ -74,7 +74,8 @@ export const scan = async (form: FormData): Promise<ScanResult> => {
   const type = form.get('type') as PhotosmartScanOptions['type'];
   const dimensionValue = form.get('dimension') as string | null;
   const resolutionValue = form.get('resolution') as string | null;
-  const quality = Number.parseInt(form.get('quality') as string, 10);
+  const parsedQuality = Number.parseInt(form.get('quality') as string, 10);
+  const quality = Number.isNaN(parsedQuality) ? undefined : parsedQuality;
   const colorModeValue = (form.get('colorMode') ??
     form.get('color')) as string | null;
   const preferredFileName = form.get('fileName') as string | null;

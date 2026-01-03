@@ -58,7 +58,7 @@ export const PhotosmartScanQualities = {
   Low: 25,
   Medium: 65,
   High: 85,
-  Maximum: 95,
+  Maximum: 100,
 };
 
 export type PhotosmartScanOptions = {
@@ -82,7 +82,7 @@ export type PhotosmartScanOptions = {
    */
   type?: 'PDF' | 'JPEG';
   /**
-   * Defaults to {@link PhotosmartScanQualities.Medium}.
+   * Defaults to {@link PhotosmartScanQualities.Maximum}.
    */
   quality?: number;
 };
@@ -164,7 +164,7 @@ class PhotosmartService {
       type: options?.type ?? 'PDF',
       quality: clamp(
         0,
-        options?.quality ?? PhotosmartScanQualities.Medium,
+        options?.quality ?? PhotosmartScanQualities.Maximum,
         100,
       ),
       colorMode: options?.colorMode ?? 'Color',
