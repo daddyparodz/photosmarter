@@ -13,6 +13,18 @@ This project is a simplified and mobile-friendly web interface for the HP Photos
 - Run `yarn build`/`npm run build` followed by `yarn start`/`npm run start`.
 - Optionally via docker: `docker compose up -d`.
 
+## Scan options
+
+Paper size, resolution, color mode, and format options are fetched dynamically from the printer (via eSCL capabilities). If the request fails, the app falls back to a built-in default set.
+
+## Development
+
+Ensure `.env` is configured (copy `.env.example`) and dependencies are installed.
+
+Start the dev server with hot reload:
+- `npm run dev` (or `yarn dev`)
+- To expose on the network: `npm run dev -- --host 0.0.0.0`
+
 ## Credits
 
 Thanks to [pyscanner](https://github.com/amlweems/pyscanner).

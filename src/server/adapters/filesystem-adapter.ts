@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Adapter } from '~/server/adapters/adapter';
-import { env } from '~/server/common/util';
+import { env, isDebugEnabled } from '~/server/common/util';
 
 class FilesystemAdapter extends Adapter {
   private directory!: string;
@@ -15,10 +15,10 @@ class FilesystemAdapter extends Adapter {
 
     const filepath = join(this.directory, name);
     try {
-      await writeFile(filepath, Buffer.from(data), {
-        encoding: 'binary',
-        flag: 'wx',
-      });
+      await writeFile(filepath, new Uint8Array(data), { flag: 'wx' });
+      if (isDebugEnabled()) {
+        console.info(`[FilesystemAdapter] Saved file: ${filepath}`);
+      }
     } catch (error) {
       console.error(
         `[FilesystemAdapter] Failed to save file '${name}' ` +
