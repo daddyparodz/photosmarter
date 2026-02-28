@@ -15,10 +15,7 @@ class FilesystemAdapter extends Adapter {
 
     const filepath = join(this.directory, name);
     try {
-      await writeFile(filepath, Buffer.from(data), {
-        encoding: 'binary',
-        flag: 'wx',
-      });
+      await writeFile(filepath, new Uint8Array(data), { flag: 'wx' });
       if (isDebugEnabled()) {
         console.info(`[FilesystemAdapter] Saved file: ${filepath}`);
       }

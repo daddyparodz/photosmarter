@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vinxi dev",
     "build": "vinxi build",
-    "start": "vinxi start"
+    "start": "vinxi start",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && npm run build"
   },
   "type": "module",
   "devDependencies": {
@@ -15,7 +17,7 @@
     "cheerio": "^1.0.0-rc.12",
     "esbuild": "^0.14.54",
     "postcss": "^8.4.31",
-    "typescript": "^4.9.4",
+    "typescript": "^5.9.3",
     "vite": "^4.5.5"
   },
   "dependencies": {

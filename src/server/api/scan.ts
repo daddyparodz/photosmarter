@@ -49,7 +49,10 @@ const parseDimension = (
     }
   }
 
-  if (value in PhotosmartScanDimensions) {
+  if (
+    typeof value === 'string' &&
+    value in PhotosmartScanDimensions
+  ) {
     return PhotosmartScanDimensions[
       value as keyof typeof PhotosmartScanDimensions
     ];
@@ -84,6 +87,15 @@ const normalizeColorMode = (
   }
 
   return undefined;
+};
+
+const removeLastExtension = (value: string): string => {
+  const trimmed = value.trim();
+  const lastDot = trimmed.lastIndexOf('.');
+  if (lastDot <= 0) {
+    return trimmed;
+  }
+  return trimmed.slice(0, lastDot);
 };
 
 export const scanCapabilities = async (): Promise<ScanCapabilities> => {
@@ -150,15 +162,14 @@ export const scan = async (form: FormData): Promise<ScanResult> => {
   const { data, extension } = result;
   const safeName =
     typeof preferredFileName === 'string' ? preferredFileName.trim() : '';
-  const safeFileName = safeName
-    ? sanitize(preferredFileName as string)
+  const safeFileNameBase = safeName
+    ? sanitize(removeLastExtension(preferredFileName as string))
     : format(new Date(), 'yyyyMMdd_HHmmss');
   const safeExtension = extension ?? 'unknown';
 
   try {
-    const name = safeFileName.concat(
-      !safeFileName.includes('.') ? `.${safeExtension}` : '',
-    );
+    const baseName = safeFileNameBase || format(new Date(), 'yyyyMMdd_HHmmss');
+    const name = `${baseName}.${safeExtension}`;
     await fileService.save(name, data);
     logDebug('Scan completed', {
       name,
